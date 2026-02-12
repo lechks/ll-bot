@@ -117,7 +117,7 @@ def send_results():
         time.sleep(30)  # проверка каждые 30 секунд
 
 # -------------------- Запуск бота и HTTP-сервера --------------------
+
 if __name__ == "__main__":
-    if __name__ == "__main__":
-        print("LL Bot started ❤️")
-        bot.infinity_polling()
+    print("LL Bot started ❤️")
+    bot.infinity_polling()

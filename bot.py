@@ -7,8 +7,8 @@ import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # -------------------- Настройки --------------------
-TOKEN = "8040240018:AAHQRfUu0HgpLP6ywlGWzRR60ZVWIx6WHyA"
-ADMIN_ID = 8040240018  # вставь свой Telegram ID
+TOKEN = os.getenv("8040240018:AAHQRfUu0HgpLP6ywlGWzRR60ZVWIx6WHyA")
+ADMIN_ID = int(os.getenv("8040240018"))
 # ---------------------------------------------------
 
 bot = telebot.TeleBot(TOKEN)

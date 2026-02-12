@@ -7,8 +7,8 @@ import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # -------------------- Настройки --------------------
-TOKEN = os.getenv("8040240018:AAHQRfUu0HgpLP6ywlGWzRR60ZVWIx6WHyA")
-ADMIN_ID = int(os.getenv("8040240018"))
+TOKEN = os.getenv("TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
 # ---------------------------------------------------
 
 bot = telebot.TeleBot(TOKEN)

@@ -1,36 +1,67 @@
 import telebot
-import json
+import sqlite3
 import os
+import time
 from datetime import datetime
 from threading import Thread
-import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# -------------------- Настройки --------------------
+# -------------------- НАСТРОЙКИ --------------------
+
 TOKEN = os.getenv("TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
-# ---------------------------------------------------
 
 bot = telebot.TeleBot(TOKEN)
 BOT_ID = bot.get_me().id
-DATA_FILE = "data.json"
 
-# -------------------- Инициализация файла данных --------------------
-if not os.path.exists(DATA_FILE):
-    with open(DATA_FILE, "w") as f:
-        json.dump({}, f)
+DB_FILE = "love.db"
 
-# -------------------- Работа с данными --------------------
-def load_data():
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
+# -------------------- СОЗДАНИЕ БАЗЫ --------------------
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    target TEXT,
+    chat_id INTEGER
+)
+""")
+
+conn.commit()
+
+# -------------------- ФУНКЦИИ БАЗЫ --------------------
+
+def save_user(username, target, chat_id):
+    cursor.execute("""
+    INSERT OR REPLACE INTO users (username, target, chat_id)
+    VALUES (?, ?, ?)
+    """, (username, target, chat_id))
+    conn.commit()
 
 
-# -------------------- Обработчики сообщений --------------------
+def get_all_users():
+    cursor.execute("SELECT username, target, chat_id FROM users")
+    return cursor.fetchall()
+
+
+def get_user(username):
+    cursor.execute("SELECT username, target, chat_id FROM users WHERE username = ?", (username,))
+    return cursor.fetchone()
+
+
+def count_likes(username):
+    cursor.execute("""
+    SELECT COUNT(*) FROM users
+    WHERE target = ?
+    AND username != ?
+    """, (username, username))
+
+    return cursor.fetchone()[0]
+
+
+# -------------------- КОМАНДА START --------------------
+
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.send_message(
@@ -38,86 +69,97 @@ def start(message):
         "Welcome to LL (Letovo Love) 💌\nSend me the @username of the person you like."
     )
 
+
+# -------------------- ОБРАБОТКА СООБЩЕНИЙ --------------------
+
 @bot.message_handler(func=lambda message: True)
 def handle_love(message):
+
     if not message.from_user.username:
-        bot.reply_to(message, "You must set a Telegram username first!")
+        bot.reply_to(message, "Set a Telegram username first!")
         return
 
-    user = message.from_user.username
-    user_id = message.chat.id
-    target = message.text.replace("@", "").strip()
+    username = message.from_user.username.lower()
+    target = message.text.replace("@", "").lower().strip()
+    chat_id = message.chat.id
 
-    data = load_data()
-    data[user] = {"target": target, "chat_id": user_id}
-    save_data(data)
+    save_user(username, target, chat_id)
 
-    # Уведомление администратору
-    if ADMIN_ID != BOT_ID:
-        try:
-            bot.send_message(ADMIN_ID, f"New submission:\n@{user} -> @{target}")
-        except Exception as e:
-            print(f"Cannot send admin message: {e}")
+    # сообщение админу
+    try:
+        bot.send_message(ADMIN_ID, f"@{username} -> @{target}")
+    except:
+        pass
 
-    # -------------------- Сообщение сразу пользователю --------------------
     bot.reply_to(message, "Wait for the results ⏳")
 
-# -------------------- Фоновая рассылка 14 февраля --------------------
+
+# -------------------- РАССЫЛКА РЕЗУЛЬТАТОВ --------------------
+
 def send_results():
-    sent_today = False
+
+    already_sent = False
+
     while True:
+
         now = datetime.now()
-        # Проверка: 14 февраля, 00:00, и чтобы не слать повторно
-        if now.month == 2 and now.day == 14 and now.hour == 0 and not sent_today:
-            print("Sending LL results to all users...")
-            data = load_data()
+
+        if now.month == 2 and now.day == 14 and now.hour == 0 and not already_sent:
+
+            print("Sending results...")
+
+            users = get_all_users()
+
             processed = set()
 
-            for user, info in data.items():
-                if user in processed:
+            for username, target, chat_id in users:
+
+                if username in processed:
                     continue
 
-                user_chat_id = info["chat_id"]
-                target = info["target"]
+                target_user = get_user(target)
 
-                # Взаимный матч
-                if target in data and "chat_id" in data[target]:
-                    target_chat_id = data[target]["chat_id"]
-                    if data[target]["target"] == user:
-                        if user_chat_id != BOT_ID and target_chat_id != BOT_ID:
-                            try:
-                                bot.send_message(user_chat_id, f"@{target}\nmatch was made 💘")
-                                bot.send_message(target_chat_id, f"@{user}\nmatch was made 💘")
-                                processed.add(user)
-                                processed.add(target)
-                                continue
-                            except Exception as e:
-                                print(f"Error sending match message: {e}")
+                # MATCH
+                if target_user and target_user[1] == username:
 
-                # Односторонняя любовь
-                count = 0
-                for u, i in data.items():
-                    if i["target"] == user and data.get(user, {}).get("target") != u:
-                        if "chat_id" in i and i["chat_id"] != BOT_ID:
-                            count += 1
-                if count > 0:
                     try:
-                        bot.send_message(user_chat_id, f"You are liked by {count} people 💖")
+                        bot.send_message(chat_id, f"@{target}\nMatch was made 💘")
+                        bot.send_message(target_user[2], f"@{username}\nMatch was made 💘")
+
+                        processed.add(username)
+                        processed.add(target)
+
                     except Exception as e:
-                        print(f"Error sending one-sided love: {e}")
+                        print(e)
 
-                # Человек ещё не отправил твой никнейм
-                if target in data and data[target]["target"] != user:
-                    try:
-                        bot.send_message(user_chat_id, "We don’t know the other person's decision yet ✨")
-                    except Exception as e:
-                        print(f"Error sending unknown decision: {e}")
+                else:
 
-            sent_today = True
-        time.sleep(30)  # проверка каждые 30 секунд
+                    likes = count_likes(username)
 
-# -------------------- Запуск бота и HTTP-сервера --------------------
+                    if likes > 0:
+                        try:
+                            bot.send_message(chat_id, f"You are liked by {likes} people 💖")
+                        except:
+                            pass
 
-if __name__ == "__main__":
-    print("LL Bot started ❤️")
-    bot.infinity_polling()
+                    if target_user and target_user[1] != username:
+                        try:
+                            bot.send_message(chat_id, "We don’t know the other person's decision yet ✨")
+                        except:
+                            pass
+
+            already_sent = True
+
+        time.sleep(30)
+
+
+# -------------------- ЗАПУСК ПОТОКА --------------------
+
+Thread(target=send_results, daemon=True).start()
+
+
+# -------------------- ЗАПУСК БОТА --------------------
+
+print("LL Bot started ❤️")
+
+bot.infinity_polling()

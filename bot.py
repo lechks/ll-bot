@@ -104,5 +104,7 @@ def handle_love(message):
             pass
 
 # -------------------- Запуск --------------------
-print("LL Bot started ❤️")
-bot.infinity_polling()
+try:
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
+except Exception as e:
+    print("Polling crashed:", e)

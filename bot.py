@@ -67,68 +67,81 @@ def handle_love(message):
         return
 
     user = message.from_user.username.lower()
-    user_chat_id = message.chat.id
+    user_id = message.chat.id
     target = message.text.replace("@", "").strip().lower()
 
-    if target == user:
-        bot.reply_to(message, "You can't select yourself 😅")
+    if target == "":
+        bot.reply_to(message, "Please send a valid username.")
         return
 
-    # сохраняем
-    save_love(user, target, user_chat_id)
+    data = load_data()
 
-    # уведомление админу
-    if ADMIN_ID != BOT_ID:
-        try:
-            bot.send_message(
-                ADMIN_ID,
-                f"New submission:\n@{user} → @{target}"
-            )
-        except:
-            pass
+    # сохраняем выбор
+    data[user] = {
+        "target": target,
+        "chat_id": user_id
+    }
 
-    # сразу говорим ждать
+    save_data(data)
+
+    print(f"{user} -> {target}")  # DEBUG
+
     bot.reply_to(message, "Wait for the results ⏳")
 
-    # проверяем взаимность
-    target_choice = get_target(target)
+    # reload data чтобы быть уверенным
+    data = load_data()
 
-    if target_choice == user:
+    # проверяем существует ли target
+    if target in data:
 
-        target_chat_id = get_chat_id(target)
+        target_target = data[target]["target"]
+        target_chat_id = data[target]["chat_id"]
+
+        # MATCH
+        if target_target == user:
+
+            try:
+                bot.send_message(
+                    user_id,
+                    f"@{target}\nmatch was made 💘"
+                )
+
+                bot.send_message(
+                    target_chat_id,
+                    f"@{user}\nmatch was made 💘"
+                )
+
+                print("MATCH:", user, target)
+
+            except Exception as e:
+                print("Match error:", e)
+
+        else:
+
+            try:
+                bot.send_message(
+                    user_id,
+                    "We don’t know the other person's decision yet ✨"
+                )
+            except:
+                pass
+
+    # считаем сколько лайков у пользователя
+    count = 0
+
+    for u in data:
+        if data[u]["target"] == user and u != user:
+            count += 1
+
+    if count > 0:
 
         try:
             bot.send_message(
-                user_chat_id,
-                f"@{target}\nmatch was made 💘"
+                user_id,
+                f"You are liked by {count} people 💖"
             )
         except:
             pass
-
-        try:
-            bot.send_message(
-                target_chat_id,
-                f"@{user}\nmatch was made 💘"
-            )
-        except:
-            pass
-
-    else:
-
-        # ещё нет ответа
-        bot.send_message(
-            user_chat_id,
-            "We don’t know the other person's decision yet ✨"
-        )
-
-    # считаем сколько лайков получил пользователь
-    likes = count_likes(user)
-
-    if likes > 0:
-        bot.send_message(
-            user_chat_id,
-            f"You are liked by {likes} people 💖"
-        )
 
 # -------------------- Запуск --------------------
 print("LL Bot started ❤️")

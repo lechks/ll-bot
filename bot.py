@@ -104,7 +104,7 @@ def send_results():
 
         now = datetime.now()
 
-        if now.month == 2 and now.day == 14 and now.hour == 0 and not already_sent:
+        if now.month == 2 and now.day == 14 and now.hour == 23 and not already_sent:
 
             print("Sending results...")
 
